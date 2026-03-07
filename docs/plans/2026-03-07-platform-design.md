@@ -276,7 +276,127 @@ Start with KM, not CAD. Fastest path to demonstrable value.
 
 ---
 
-## 8. Open Questions
+## 8. Standards Compliance
+
+Multi-agency coordination and interoperability are first-class requirements. The platform speaks the language of every system it connects to.
+
+### Standards Map
+
+| Concept | ICS/CAD | IAMSAR/Maritime | NATO/Military | Platform entity |
+|---|---|---|---|---|
+| Something happening | Incident | SAR Case | Action/Event | **Incident** |
+| Who's in charge | Incident Commander | SMC | Commanding Officer | **Command** |
+| On-scene lead | Ops Section Chief | OSC | Task Group Commander | **Command member** |
+| Participating orgs | Agency | MRCC / assisting units | Organisations | **Agency** |
+| Who/what responds | Resource | SAR facility | Materiel/Person | **Resource** |
+| Work assigned | Assignment | Tasking | Task | **Assignment** |
+| Where things are | AVL / map | AIS / GMDSS | Operational picture | **Position** |
+| Map symbol | — | — | APP-6D SIDC | **Resource.app6_sidc** |
+| Geographic context | Division/Zone | Search area / SRR | Area of Operations | **Zone** |
+
+### Standards Implemented
+
+| Standard | Body | What it governs | Implementation |
+|---|---|---|---|
+| EIDO (NENA-STA-021) | NENA | CAD-to-CAD incident data exchange | Incident identifier format + EIDO JSON export |
+| APCO Common Incident Types | APCO | Incident type taxonomy (fire/EMS/law) | Base incident type codes, maritime extensions added |
+| ICS / NIMS | FEMA | Incident command structure, unified command | Command entity, resource status codes |
+| IAMSAR | IMO/ICAO | Maritime SAR coordination, SMC/OSC roles | Incident phases (uncertainty/alert/distress), command roles |
+| APP-6D / MIL-STD-2525D | NATO/DoD | Military map symbology (SIDC) | Resource.app6_sidc, COP symbol rendering |
+| ITU-R M.1371 (AIS) | ITU | Vessel position reporting (NMEA/AIVDM) | AIS adapter, Resource.ais_mmsi, Position.ais_fields |
+| JC3IEDM / MIM | NATO MIP | C2 information exchange data model | Entity naming and relationship model |
+| NIEM | US DoJ/DHS | Data exchange foundation | EIDO compliance, interoperability schemas |
+
+---
+
+## 9. Domain Model
+
+Designed from outside-in research across ICS, IAMSAR, NATO C2, EIDO, AIS, and APP-6D standards. Multi-agency coordination is first-class — not an afterthought.
+
+```
+Agency
+├── id
+├── name
+├── type: coast_guard | military | police | fire | ems
+│         port_authority | foreign_coast_guard
+└── contact
+
+Incident
+├── id              ← EIDO-compatible globally unique identifier
+├── type            ← APCO taxonomy code (fire/ems/law/maritime/border/threat)
+├── subtype         ← domain-specific (SAR/pollution/vessel_distress/shadow_fleet)
+├── phase           ← maritime: uncertainty → alert → distress
+│                      all:      new → active → coordinating → resolved → closed
+├── severity        ← P1–P4
+├── location        ← coordinates + zone_id
+├── command_type    ← single_agency | unified_command
+├── lead_agency_id
+├── agencies[]      ← all participating agencies (unified command)
+└── timeline[]      ← append-only event log (immutable audit trail)
+
+Command             ← models ICS Unified Command + IAMSAR SMC/OSC structure
+├── incident_id
+└── members[]
+    ├── agency_id
+    ├── role: IC | SMC | OSC | deputy | liaison | observer
+    └── since
+
+Resource            ← vessel, aircraft, vehicle, person, unit
+├── id
+├── type: vessel | aircraft | vehicle | person | team
+├── name
+├── agency_id       ← owning agency
+├── capabilities[]  ← from SAP/HR integration
+├── status: available | staged | dispatched | en_route
+│           on_scene | returning | out_of_service
+├── position        ← current + timestamp + source + staleness_seconds
+├── ais_mmsi        ← vessels: links to AIS stream (ITU-R M.1371)
+└── app6_sidc       ← APP-6D / MIL-STD-2525D 20-char symbol code
+
+Assignment          ← resource committed to incident
+├── incident_id
+├── resource_id
+├── requesting_agency_id
+├── providing_agency_id   ← may differ (KNRM supports Kustwacht incident)
+├── role: primary | support | staging | liaison
+├── status: dispatched | en_route | on_scene | returning
+└── eta
+
+Position            ← time-series feed, drives the COP
+├── resource_id
+├── timestamp
+├── coordinates
+├── source: ais | gps_avl | manual
+└── ais_fields      ← heading, speed, nav_status (AIS msg type 1/2/3)
+
+Zone
+├── id
+├── name
+├── type: sea_area | srr | border_zone | jurisdiction
+│         search_area | aoo
+├── geometry        ← GeoJSON
+└── agency_id       ← responsible agency
+
+Alert               ← inbound from external sources
+├── id
+├── source: nl_alert | p2000 | ais_distress | mayday | manual
+│           external_agency | sensor
+├── type
+├── location
+└── incident_id     ← nullable: linked when dispatcher creates incident
+```
+
+### Three multi-agency properties that matter
+
+**`providing_agency_id` ≠ `requesting_agency_id` on Assignment** — KNRM lifeboat responds to a Kustwacht incident. Each agency retains ownership of their resource while it is operationally tasked to another agency's incident. This is Unified Command expressed in the data model.
+
+**`app6_sidc` on Resource** — every resource renders as a correct APP-6D military symbol on the COP map without manual configuration. A Kustwacht vessel, a Mariniers unit, a Landmacht helicopter — all display with proper NATO symbology to a military operator.
+
+**Dual-track `phase` on Incident** — maritime incidents carry the IAMSAR `uncertainty/alert/distress` phase alongside the operational status. A SAR coordinator sees the IAMSAR phase; a fire chief sees `active/coordinating`. Same incident, right vocabulary per role.
+
+---
+
+## 10. Open Questions
 
 | Question | Impact |
 |---|---|
