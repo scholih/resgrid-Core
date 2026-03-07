@@ -1,4 +1,4 @@
-# Connexio-Ops Platform Design
+# DefGridOps Platform Design
 
 **Date:** 2026-03-07
 **Status:** Validated — ready for implementation planning
@@ -204,7 +204,7 @@ Internal docs   ──── push ────►  ingest-adapter     ►  Knowl
 Go monorepo with clean internal boundaries. Modules are logical separations within the same deployable — not microservices.
 
 ```
-connexio-ops/
+defgridops/
 ├── cmd/
 │   ├── api/          ← main API server (all modules behind one gateway)
 │   ├── worker/       ← background jobs, NATS subscribers
@@ -220,7 +220,7 @@ connexio-ops/
 │   └── transport/    ← HTTP handlers, WebSocket, routing (chi)
 │
 ├── services/
-│   └── connexio-ai/  ← Python FastAPI (RAG, GraphRAG, Ollama)
+│   └── defgrid-ai/  ← Python FastAPI (RAG, GraphRAG, Ollama)
 │
 └── infra/
     ├── postgres/     ← init SQL, migrations
@@ -243,7 +243,7 @@ connexio-ops/
 Full stack running, nothing functional yet. Every service starts, connects, stays healthy.
 - Go API with `/health`
 - Docker Compose: postgres+pgvector, neo4j, redis, nats, zitadel
-- connexio-ai FastAPI with `/health`
+- defgrid-ai FastAPI with `/health`
 - Adapter plumbing wired to NATS (no real sources yet)
 
 ### Phase 1 — Knowledge foundation
@@ -396,7 +396,51 @@ Alert               ← inbound from external sources
 
 ---
 
-## 10. Open Questions
+## 10. Knowledge Corpus Structure
+
+### Separation of concerns
+
+| Corpus | Location | Owner | Status |
+|---|---|---|---|
+| Kustwacht operational | `rag_db` @ localhost:5532 | BF / kustw8-core | 2,329 docs, production-ready |
+| CAD domain knowledge | `~/data/CAD/` | Relogiks | To be built |
+| Defense/COP domain | `~/data/COPS/` | Relogiks | To be built |
+
+Kustwacht corpus is never touched — it is BF-associated and already evaluated. DefGridOps uses a multi-tenant schema that can host all three corpora independently.
+
+### kustw8-core schema — reuse this pattern
+
+The existing `rag_db` schema is production-grade and should be the template for DefGridOps's KM layer, with `corpus_id` added for multi-tenancy:
+
+```sql
+document_chunks (
+  corpus_id           varchar         -- CAD | COPS | kustwacht | ...
+  embedding           vector(1024)    -- bge-m3, HNSW index
+  chunk_tsv           tsvector        -- BM25 full-text, GIN index
+  primary_persona     varchar         -- coordinator | specialist | commander
+  hierarchy_level     varchar         -- section structure awareness
+  clearance_level     text[]          -- operational | restricted | confidential
+)
+
+entities (
+  corpus_id           varchar
+  entity_type         text
+  clearance_level     text[]
+  persona_affinity    text[]          -- which personas care about this entity
+)
+```
+
+### CAD corpus — target documents
+
+ICS-100/200/300/400 (FEMA), APCO Common Incident Types, NENA EIDO standard, APCO Common Status Codes, general emergency management doctrine.
+
+### COPS corpus — target documents
+
+Netherlands Defence Doctrine 2025, Defence White Paper 2024, Defence Strategy for Industry 2025–2029, Departementaal I-plan Defensie 2025–2027, NATO AJP-01/AJP-6 doctrine, IAMSAR Vol. I/II/III, KNRM annual reports, Kustwacht annual reports 2022–2024, EMSA maritime safety publications, seabed infrastructure threat reports, shadow fleet analyses.
+
+---
+
+## 11. Open Questions
 
 | Question | Impact |
 |---|---|
@@ -409,4 +453,4 @@ Alert               ← inbound from external sources
 
 ---
 
-*Validated through design brainstorm session 2026-03-07. Supersedes the earlier Connexio-Ops design doc (2026-02-23) which was written for a narrower Kustwacht-only scope.*
+*Validated through design brainstorm session 2026-03-07. Supersedes the earlier DefGridOps design doc (2026-02-23) which was written for a narrower Kustwacht-only scope.*
